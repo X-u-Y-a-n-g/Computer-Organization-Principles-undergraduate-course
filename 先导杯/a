@@ -1,0 +1,58 @@
+import random
+from QRobot import QRobot
+
+class Robot(QRobot):
+    valid_actions = ['u', 'r', 'd', 'l']
+
+    def __init__(self, maze, alpha=0.5, gamma=0.9, epsilon=0.5):
+        self.maze = maze
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.q_table = {}
+
+        self.reset()
+
+    def reset(self):
+        """重置机器人状态"""
+        self.maze.reset_robot()
+        self.state = self.maze.sense_robot()
+        self._ensure_state(self.state)
+
+    def _ensure_state(self, state):
+        """确保状态存在于Q表"""
+        if state not in self.q_table:
+            self.q_table[state] = {a: 0.0 for a in self.valid_actions}
+
+    def _choose_action(self, state, train=True):
+        """根据 epsilon-greedy 选择动作"""
+        self._ensure_state(state)
+        if train and random.random() < self.epsilon:
+            return random.choice(self.valid_actions)
+        return max(self.q_table[state], key=self.q_table[state].get)
+
+    def train_update(self):
+        """训练状态下进行一次更新"""
+        current_state = self.maze.sense_robot()
+        action = self._choose_action(current_state, train=True)
+        reward = self.maze.move_robot(action)
+        next_state = self.maze.sense_robot()
+
+        self._ensure_state(next_state)
+
+        # Q-learning 核心公式
+        q_predict = self.q_table[current_state][action]
+        q_target = reward + self.gamma * max(self.q_table[next_state].values())
+        self.q_table[current_state][action] += self.alpha * (q_target - q_predict)
+
+        # epsilon 衰减
+        self.epsilon *= 0.99  # 比原来的0.5保守，探索时间更长
+
+        return action, reward
+
+    def test_update(self):
+        """测试状态下进行一次更新（不训练）"""
+        current_state = self.maze.sense_robot()
+        action = self._choose_action(current_state, train=False)
+        reward = self.maze.move_robot(action)
+        return action, reward
